@@ -31,6 +31,8 @@ Then open the URL it prints — usually http://localhost:5173.
 This UI includes:
 
 - live multi-stage pipeline status for search → reader → writer → critic
+- a separate document chat for normal conversations, web pages, and text-based PDFs
+- advisory copyright/license indicator and safety keyword checks for loaded sources
 - source list display for discovered URLs
 - copy-to-clipboard support for the final research report
 - download-as-text export for saved research notes
@@ -47,3 +49,11 @@ VITE_API_BASE=http://localhost:8000
 ```
 
 If you do not set it, the app falls back to `http://localhost:8000` automatically.
+
+## Document chat notes
+
+- PDF uploads are limited to 8 MB and 100 pages. Scanned PDFs that contain no selectable text need OCR, which is not included.
+- URL loading supports public HTTP/HTTPS web pages and PDF links; local/private-network URLs and redirects are rejected.
+- Copyright checks only look for common notice/license wording. A missing notice is not permission to reuse content, and these checks are not legal advice.
+- Safety checks are advisory keyword scans. They can miss unsafe content or flag benign content and do not block messages.
+- Chat requests are sent to the configured model provider through the backend.

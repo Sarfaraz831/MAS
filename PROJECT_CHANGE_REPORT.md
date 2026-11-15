@@ -1,7 +1,7 @@
 # Project Change Report
 
 ## Overview
-This report documents the changes made to the research pipeline project in the current workspace. The project is a multi-agent research application that combines web search, content extraction, report generation, evaluation, and a browser-based user interface.
+This report documents the changes made to the research pipeline project in the current workspace. The project is a multi-agent research application with web research, source extraction, report generation, evaluation, and a browser-based UI. It now also includes a separate chatbot for normal conversations and questions about web pages or PDFs.
 
 The work focused on improving reliability, usability, maintainability, and the user experience of the research workflow.
 
@@ -10,10 +10,13 @@ The project contains the core backend files and a React frontend:
 
 - `agents.py` — defines the search agent, reader agent, writer prompt, and critic prompt
 - `api_server.py` — FastAPI backend that streams each stage of the research pipeline
+- `document_chat.py` — URL/PDF text extraction, source limits, copyright indicators, and safety keyword checks
 - `pipeline.py` — script-based terminal pipeline flow
 - `tools.py` — Tavily search and URL scraping utilities
 - `requirements.txt` — Python dependency manifest
-- `research-ui/` — React + Vite frontend for displaying the pipeline and final output
+- `research-ui/src/App.jsx` — navigation between the research pipeline and document chat
+- `research-ui/src/DocumentChat.jsx` — document ingestion and chat interface
+- `research-ui/` — React + Vite frontend
 
 ## 2. Key Improvements Made
 
@@ -129,6 +132,34 @@ Why this matters:
 Files changed:
 - `research-ui/src/ResearchUI.jsx`
 
+### 2.7 Document chatbot, URL/PDF ingestion, and checks
+A second UI view was added for general chat and document-based questions.
+
+Added features:
+- Load public HTTP/HTTPS web pages, plain text pages, and linked PDFs
+- Upload text-based PDFs (up to 8 MB and 100 pages)
+- Extract document text and preserve source title and URL or PDF page markers
+- Ask follow-up questions or request a document summary
+- Continue normal chat without attaching a document
+- Display copyright/license notice indicators and safety keyword warnings
+- Reject local/private-network URLs and redirects; reject unsupported or unreadable PDFs
+
+The checks are deliberately advisory:
+- Copyright indicators are heuristic notice/license matches, not a rights clearance or legal opinion
+- Safety checks use configured keyword patterns, can miss or over-flag content, and do not block the user
+- Scanned PDFs without selectable text require OCR, which is not included
+
+Files changed:
+- `api_server.py`
+- `document_chat.py`
+- `requirements.txt` (`pypdf` for PDF text extraction)
+- `research-ui/src/App.jsx`
+- `research-ui/src/DocumentChat.jsx`
+- `research-ui/src/main.jsx`
+- `research-ui/src/ResearchUI.jsx`
+- `research-ui/README.md`
+- `tests/test_document_chat.py`
+
 ## 3. Additional Enhancements to the Writer and Critic Workflow
 The prompt behavior was improved to make the output more useful for citation-friendly research work.
 
@@ -141,18 +172,41 @@ Changes made:
 Files changed:
 - `agents.py`
 
-## 4. Validation Performed
-To confirm the frontend still works after the changes, the project was validated using a production build.
+## 4. Document Chat and LLM Integration
 
-Command used:
-- `npm install`
-- `npm run build`
+The chatbot uses the same model instance configured in `agents.py`; it does not introduce a separate model. The current configuration creates a `ChatGroq` model using `openai/gpt-oss-120b`. The actual provider/model can be changed in that module, and the required provider credentials must be available to the backend.
+
+### Request flow
+1. The React chat view sends a URL to `POST /api/chat/source/url` or a PDF to `POST /api/chat/source/pdf`.
+2. FastAPI calls the extraction helpers in `document_chat.py`. Extraction and copyright/safety scans run locally in the backend; the LLM is not called during source loading.
+3. The backend returns extracted text, source details, and check results to the UI. The UI shows the notices and warnings.
+4. When the user sends a chat message, the UI posts the conversation and (if attached) the extracted source text to `POST /api/chat`.
+5. The backend selects relevant passages, adds them and recent conversation messages to a system/user/assistant message list, and calls the configured model using `llm.invoke(...)`.
+6. The answer is checked for configured safety keywords and returned with any warnings. The UI displays the answer and flags; warnings do not prevent the response.
+
+With no source attached, the request goes to the same LLM as ordinary chat, without document context. With a source attached, the model receives selected excerpts plus its title and URL (or PDF page markers). Document text is treated as untrusted reference material in the system instructions.
+
+### Current retrieval and limitations
+The current passage selection is a lightweight, keyword-based approach in `api_server.py`; it splits the extracted text into overlapping character chunks and chooses chunks based on terms in the question. It is **not yet full semantic RAG**: the project does not currently generate embeddings or store chunks in a vector database. The UI sends the extracted source text with each chat request, and the backend caps the selected model context.
+
+For long-document summaries, the code samples passages across the document; it may not capture every detail. Scanned PDFs, persistent document indexes, and multi-user chat storage are not supported.
+
+Because prompts and selected document passages are passed to the configured LLM provider, those contents leave the application backend for model processing. Configure the provider and data handling policy accordingly.
+
+## 5. Validation Performed
+The recent chatbot changes were validated with:
+
+- `npm run build` in `research-ui/`
+- `.venv\Scripts\python.exe -m unittest discover -s tests -v`
+- Python compile checks for the backend and tests
+- API smoke tests with a stub LLM (chat returned successfully; a private URL and invalid PDF were rejected)
 
 Result:
-- Build completed successfully
-- No blocking frontend errors were found during the build process
+- The frontend production build completed successfully
+- All 7 backend unit tests passed
+- API smoke tests passed without making an external model call
 
-## 5. Overall Assessment
+## 6. Overall Assessment
 The project started as a strong research prototype and was improved into a more usable, understandable, and user-friendly research workflow.
 
 The strongest improvements include:
@@ -162,19 +216,21 @@ The strongest improvements include:
 - source visibility
 - final result export options
 - recent research history
+- source-aware chat for web pages and text-based PDFs
+- advisory copyright and safety indicators
 
 These changes significantly improve the project’s usability and make it easier to extend in future work.
 
-## 6. Recommended Next Enhancements
+## 7. Recommended Next Enhancements
 The following are logical next steps for future work:
 
-1. Add source credibility scoring
-2. Add multi-source comparison mode
-3. Support citation-style references in the report output
-4. Add PDF/Markdown export options
-5. Improve the scraper with retries and browser-based extraction
-6. Add user authentication and saved workspaces
-7. Add backend job persistence for long-running research tasks
+1. Replace keyword passage selection with embeddings and a vector store for semantic RAG
+2. Add citations linking chatbot claims to exact source pages/passages
+3. Add OCR support for scanned PDFs
+4. Add persistent document/chat storage with user isolation and deletion controls
+5. Improve URL extraction for JavaScript-heavy pages and add source credibility scoring
+6. Add multi-source comparison and citation-style report output
+7. Add PDF/Markdown export options and backend job persistence for long-running research tasks
 
-## 7. Conclusion
+## 8. Conclusion
 The project is now better organized, easier to run, easier to understand, and more useful as a research tool. The changes made in the workspace improve both the technical quality and the user-facing experience, while also preparing the project for future feature expansion.
