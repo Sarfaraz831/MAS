@@ -146,7 +146,7 @@ function StageBadge({ status }) {
   return <span className={`font-mono text-[11px] tracking-widest ${cls}`}>{label}</span>;
 }
 
-export default function ResearchPipelineUI() {
+export function ResearchPipelineUI() {
   const [topic, setTopic] = useState("");
   const [runState, setRunState] = useState("idle"); // idle | running | done | error
   const [stageData, setStageData] = useState(emptyStageData);
