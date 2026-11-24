@@ -93,7 +93,7 @@ def run_pipeline_stream(topic: str):
                         "user",
                         f"Based on the following search results about '{topic}', "
                         f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                        f"Search Results:\n{state['search_results'][:800]}",
+                        f"Search Results:\n{state['search_results']}",
                     )
                 ]
             }
@@ -113,7 +113,7 @@ def run_pipeline_stream(topic: str):
 
         # Critic stage: review the final report for quality, weaknesses, and omissions.
         yield _sse("stage", {"stage": "critic", "status": "active"})
-        state["feedback"] = _text(critic_chain.invoke({"report": state["report"]}))
+        state["feedback"] = _text(critic_chain.invoke({"report": state["report"], "research": research_combined}))
         yield _sse("stage", {"stage": "critic", "status": "done", "output": state["feedback"]})
 
         # Final state includes the report and source list so the UI can present
